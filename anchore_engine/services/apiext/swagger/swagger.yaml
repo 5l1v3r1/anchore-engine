@@ -2979,6 +2979,9 @@ definitions:
         type: string
       comment:
         type: string
+      expires_on:
+        type: string
+        format: "date-time"
       items:
         type: array
         items:

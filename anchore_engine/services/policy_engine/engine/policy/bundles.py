@@ -1,8 +1,11 @@
 from collections import OrderedDict, namedtuple
 import enum
 import copy
+import datetime
 import re
 import itertools
+
+from anchore_engine.db.entities.common import anchore_now_datetime
 from anchore_engine.services.policy_engine.engine.policy.gate import Gate, TriggerMatch
 from anchore_engine.subsys import logger
 from anchore_engine.util.docker import parse_dockerimage_string
@@ -29,7 +32,7 @@ from anchore_engine.services.policy_engine.engine.policy.exceptions import Trigg
 
 # Load all the gate classes to ensure the registry is populated. This may appear unused but is necessary for proper lookup
 from anchore_engine.services.policy_engine.engine.policy.gates import *
-
+from anchore_engine.utils import rfc3339str_to_datetime
 
 
 class VersionedEntityMixin(object):
@@ -998,6 +1001,9 @@ class ExecutableWhitelist(VersionedEntityMixin):
         self.id = whitelist_json.get('id')
         self.name = whitelist_json.get('name')
         self.comment = whitelist_json.get('comment')
+        expires_on_str = whitelist_json.get('expires_on', '')
+        if expires_on_str:
+            self.expires_on = rfc3339str_to_datetime(expires_on_str)
 
         self.items = []
         self.whitelist_item_index = HybridTriggerIdKeyedItemIndex(item_key_fn=StandardCVETriggerIdKey.whitelist_item_key, match_key_fn=StandardCVETriggerIdKey.decision_item_key)
@@ -1024,6 +1030,10 @@ class ExecutableWhitelist(VersionedEntityMixin):
         """
 
         processed_decisions = copy.deepcopy(policyrule_decisions)
+
+        # If this whitelist set is expired, we do not search for any matches
+        if hasattr(self, 'expires_on') and self.expires_on and anchore_now_datetime() >= self.expires_on:
+            return processed_decisions
 
         for decision in processed_decisions:
             if ExecutableWhitelist._use_indexes:
